@@ -1,48 +1,55 @@
 local source = {}
 
+local path_separator = vim.loop.os_uname().version:match("Windows") and "\\" or "/"
+
+local default_config = {
+    console_command = { "php", "bin/console" },
+    cwd = nil,
+    cwd_files = { "composer.json", "bin/console" },
+    filetypes = { "php", "twig" },
+}
+
 function source.new()
     return setmetatable({}, { __index = source })
 end
 
-function source:is_available()
-    if not vim.tbl_contains({ "php", "twig", "yaml" }, vim.bo.filetype) then
-        return false
+function source.complete(_, params, callback)
+    local opts = vim.tbl_extend("force", vim.deepcopy(default_config), vim.deepcopy(params.option or {}))
+    vim.validate({
+        console_command = { opts.console_command, "table" },
+        cwd = { opts.cwd, "string", true },
+        cwd_files = { opts.cwd_files, "table" },
+        filetypes = { opts.filetypes, "table" },
+    })
+
+    if not vim.tbl_contains(opts.filetypes, vim.bo.filetype) then
+        return callback({ items = {}, isIncomplete = false })
     end
 
-    local cwd = vim.loop.cwd()
-
-    local composer_path = cwd .. "/composer.json"
-    local has_composer, _ = pcall(vim.loop.fs_stat, composer_path)
-    if not has_composer then
-        return false
+    local cwd = opts.cwd or vim.loop.cwd()
+    for _, fname in ipairs(opts.cwd_files) do
+        local fpath = cwd .. path_separator .. fname
+        local ok, stat = pcall(vim.loop.fs_stat, fpath)
+        if not ok or nil == stat then
+            return callback({ items = {}, isIncomplete = false })
+        end
     end
 
-    local console_path = cwd .. "/bin/console"
-    local has_console, _ = pcall(vim.loop.fs_stat, console_path)
-    if not has_console or 1 ~= vim.fn.executable(console_path) then
-        return false
-    end
+    local command = table.remove(opts.console_command, 1)
+    local args = opts.console_command
+    vim.list_extend(args, { "debug:router", "--raw", "--no-interaction", "--format", "json" })
 
-    return true
-end
-
-function source:complete(_, callback)
-    local error = false
-
+    local stderr = false
     require("plenary.job")
         :new({
-            "bin/console",
-            "debug:router",
-            "--raw",
-            "--no-interaction",
-            "--format",
-            "json",
-            cwd = vim.loop.cwd(),
+            command = command,
+            args = args,
+            cwd = cwd,
             on_stderr = function()
-                error = true
+                stderr = true
             end,
             on_exit = function(job)
-                if error then
+                if stderr then
                     return
                 end
 

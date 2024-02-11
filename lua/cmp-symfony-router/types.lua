@@ -1,3 +1,9 @@
+---@class cmp_symfony_router.Options
+---@field console_command? string[]
+---@field cwd? string
+---@field cwd_files? string[]
+---@field filetypes? string[]
+
 ---@class cmp_symfony_router.RouteDefaults: table<string, mixed>
 ---@field _locale? string
 ---@field _canonical_route? string
